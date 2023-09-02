@@ -1,0 +1,74 @@
+--dim汽车信息维度表
+drop table if exists dim_car_info_full;
+create external table dim_car_info_full
+(
+    `id`               string comment '车辆唯一编码',
+    `type_id`          string comment '车型ID',
+    `type`             string comment '车型',
+    `sale_type`        string comment '销售车型',
+    `trademark`        string comment '品牌',
+    `company`          string comment '厂商',
+    `seating_capacity` int comment '准载人数',
+    `power_type`       string comment '车辆动力类型',
+    `charge_type`      string comment '车辆支持充电类型',
+    `category`         string comment '车辆分类',
+    `weight_kg`        int comment '总质量（kg）',
+    `warranty`         string comment '整车质保期（年/万公里）'
+) comment '车辆信息维度表'
+    partitioned by (`dt` string comment '统计日期')
+    stored as orc
+    location '/warehouse/car_data/dim/dim_car_info_full'
+    tblproperties ('orc.compress' = 'snappy');
+
+
+--装载数据进入维度表（同步最新一天的全量数据即可）
+insert overwrite table dim_car_info_full partition (dt='2023-07-27')
+select
+    `id`,
+    `type_id`,
+    `type`,
+    `sale_type`,
+    `trademark`,
+    `company`,
+    `seating_capacity`,
+    `power_type`,
+    `charge_type`,
+    `category` ,
+    `weight_kg`,
+    `warranty`
+    from ods_car_info_full
+    where dt='2023-07-27';
+
+--创建日志编码维度表
+drop table if exists dim_code_full;
+create external table dim_code_full
+(
+    `type`               string comment '编码类型',
+    `code_id`          string comment '编码ID',
+    `code_name`             string comment '编码名称'
+) comment '日志编码维度表'
+ stored as orc
+location '/warehouse/car_data/dim/dim_code_full'
+tblproperties ('orc.compress' = 'snappy');
+
+
+--导入编码表数据
+--1.创建临时表格
+drop table if exists tmp_code_full;
+create external table tmp_code_full
+(
+    `type`               string comment '编码类型',
+    `code_id`          string comment '编码ID',
+`code_name`             string comment '编码名称'
+) comment '日志编码维度表'
+row format delimited
+fields terminated by '\t'
+location '/warehouse/car_data/tmp/tmp_code_full';
+--2.HDFS数据映射，查看是否成功
+select * from tmp_code_full;
+
+--3.把临时表的数据加载到编码表
+insert into table dim_code_full
+select * from tmp_code_full;
+--4.查看数据加载是否成功
+select * from dim_code_full;
